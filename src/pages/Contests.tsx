@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { motion } from "framer-motion";
-import { Bell, Calendar, Clock, Filter, Search, X } from "lucide-react";
+import { Bell, BellOff, Calendar, Clock, Filter, Loader2, Radio, RefreshCw, Search, Volume2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,122 +13,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useContests } from "@/hooks/useContests";
+import { Contest, contestService } from "@/services/contestService";
+import { alarmService } from "@/services/alarmService";
+import { toast } from "sonner";
 
-const allContests = [
-  {
-    id: 1,
-    name: "Codeforces Round #912 (Div. 2)",
-    platform: "Codeforces",
-    logo: "CF",
-    color: "from-red-500 to-orange-500",
-    startTime: "2024-01-20T14:35:00Z",
-    timeUntil: "2h 30m",
-    duration: "2h",
-    difficulty: "Div. 2",
-    participants: "15k+",
-    subscribed: true,
-  },
-  {
-    id: 2,
-    name: "LeetCode Weekly Contest 378",
-    platform: "LeetCode",
-    logo: "LC",
-    color: "from-yellow-500 to-orange-500",
-    startTime: "2024-01-21T02:30:00Z",
-    timeUntil: "1d 4h",
-    duration: "1h 30m",
-    difficulty: "Mixed",
-    participants: "25k+",
-    subscribed: true,
-  },
-  {
-    id: 3,
-    name: "AtCoder Beginner Contest 335",
-    platform: "AtCoder",
-    logo: "AC",
-    color: "from-gray-700 to-gray-500",
-    startTime: "2024-01-22T12:00:00Z",
-    timeUntil: "2d 12h",
-    duration: "1h 40m",
-    difficulty: "ABC",
-    participants: "12k+",
-    subscribed: false,
-  },
-  {
-    id: 4,
-    name: "CodeChef Starters 117",
-    platform: "CodeChef",
-    logo: "CC",
-    color: "from-amber-600 to-yellow-500",
-    startTime: "2024-01-23T14:30:00Z",
-    timeUntil: "3d 8h",
-    duration: "2h",
-    difficulty: "Div. 2+3",
-    participants: "8k+",
-    subscribed: false,
-  },
-  {
-    id: 5,
-    name: "Codeforces Round #913 (Div. 3)",
-    platform: "Codeforces",
-    logo: "CF",
-    color: "from-red-500 to-orange-500",
-    startTime: "2024-01-24T14:35:00Z",
-    timeUntil: "4d 2h",
-    duration: "2h 15m",
-    difficulty: "Div. 3",
-    participants: "20k+",
-    subscribed: false,
-  },
-  {
-    id: 6,
-    name: "LeetCode Biweekly Contest 121",
-    platform: "LeetCode",
-    logo: "LC",
-    color: "from-yellow-500 to-orange-500",
-    startTime: "2024-01-25T14:30:00Z",
-    timeUntil: "5d 4h",
-    duration: "1h 30m",
-    difficulty: "Mixed",
-    participants: "18k+",
-    subscribed: false,
-  },
-  {
-    id: 7,
-    name: "TopCoder SRM 850",
-    platform: "TopCoder",
-    logo: "TC",
-    color: "from-blue-600 to-blue-400",
-    startTime: "2024-01-26T20:00:00Z",
-    timeUntil: "6d 10h",
-    duration: "1h 15m",
-    difficulty: "SRM",
-    participants: "2k+",
-    subscribed: false,
-  },
-  {
-    id: 8,
-    name: "HackerRank Week of Code",
-    platform: "HackerRank",
-    logo: "HR",
-    color: "from-green-600 to-emerald-500",
-    startTime: "2024-01-27T00:00:00Z",
-    timeUntil: "7d",
-    duration: "7d",
-    difficulty: "Mixed",
-    participants: "10k+",
-    subscribed: false,
-  },
-];
+const platforms = ["All", "Codeforces", "LeetCode", "AtCoder", "CodeChef"];
+const difficulties = ["All", "Easy", "Medium", "Hard", "Mixed"];
 
-const platforms = ["All", "Codeforces", "LeetCode", "AtCoder", "CodeChef", "TopCoder", "HackerRank"];
-const difficulties = ["All", "Div. 1", "Div. 2", "Div. 3", "Mixed", "ABC", "SRM"];
+const platformColors: Record<string, string> = {
+  Codeforces: "from-red-500 to-orange-500",
+  LeetCode: "from-yellow-500 to-orange-500",
+  AtCoder: "from-gray-700 to-gray-500",
+  CodeChef: "from-amber-600 to-yellow-500",
+};
+
+const platformLogos: Record<string, string> = {
+  Codeforces: "CF",
+  LeetCode: "LC",
+  AtCoder: "AC",
+  CodeChef: "CC",
+};
 
 const Contests = () => {
+  const { contests, loading, error, lastUpdated, refresh, liveContests } = useContests();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPlatform, setSelectedPlatform] = useState("All");
   const [selectedDifficulty, setSelectedDifficulty] = useState("All");
-  const [contests, setContests] = useState(allContests);
+  const [subscribedContests, setSubscribedContests] = useState<Set<string>>(new Set());
+  const [alarmPermission, setAlarmPermission] = useState(false);
+
+  useEffect(() => {
+    // Check alarm permission on mount
+    alarmService.requestPermissions().then(setAlarmPermission);
+    
+    // Load subscribed contests from localStorage
+    const saved = localStorage.getItem('subscribedContests');
+    if (saved) {
+      setSubscribedContests(new Set(JSON.parse(saved)));
+    }
+  }, []);
 
   const filteredContests = contests.filter((contest) => {
     const matchesSearch = contest.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -137,10 +61,49 @@ const Contests = () => {
     return matchesSearch && matchesPlatform && matchesDifficulty;
   });
 
-  const toggleSubscription = (id: number) => {
-    setContests(contests.map(c => 
-      c.id === id ? { ...c, subscribed: !c.subscribed } : c
-    ));
+  const toggleSubscription = async (contest: Contest) => {
+    const newSubscribed = new Set(subscribedContests);
+    
+    if (subscribedContests.has(contest.id)) {
+      // Unsubscribe
+      newSubscribed.delete(contest.id);
+      const alarmId = parseInt(contest.id.replace(/\D/g, '')) || Math.random() * 10000;
+      await alarmService.cancelAlarm(alarmId);
+      toast.success(`${contest.name} से unsubscribe किया`);
+    } else {
+      // Subscribe
+      newSubscribed.add(contest.id);
+      
+      if (!alarmPermission) {
+        const granted = await alarmService.requestPermissions();
+        setAlarmPermission(granted);
+        if (!granted) {
+          toast.error("Alarm permission denied. Please enable notifications.");
+          return;
+        }
+      }
+
+      // Schedule alarms for 60m, 30m, 10m before
+      const offsets = [60, 30, 10, 0];
+      for (const offset of offsets) {
+        const alarmId = parseInt(contest.id.replace(/\D/g, '')) * 10 + offset;
+        await alarmService.scheduleContestAlarm({
+          id: alarmId,
+          contestId: contest.id,
+          contestName: contest.name,
+          platform: contest.platform,
+          startTime: contest.startTime,
+          reminderOffset: offset
+        });
+      }
+      
+      toast.success(`🔔 ${contest.name} के लिए alarm set!`, {
+        description: "Contest शुरू होने से पहले alarm बजेगा"
+      });
+    }
+    
+    setSubscribedContests(newSubscribed);
+    localStorage.setItem('subscribedContests', JSON.stringify([...newSubscribed]));
   };
 
   const clearFilters = () => {
@@ -163,9 +126,56 @@ const Contests = () => {
             transition={{ duration: 0.5 }}
             className="mb-8"
           >
-            <h1 className="text-3xl md:text-display-sm font-bold mb-2">Contest Explorer</h1>
-            <p className="text-muted-foreground">Discover and subscribe to upcoming coding contests across all platforms.</p>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h1 className="text-3xl md:text-display-sm font-bold mb-2">
+                  Contest Explorer 🔔
+                </h1>
+                <p className="text-muted-foreground">
+                  Subscribe करो, alarm बजेगा! Live data from Codeforces, LeetCode, AtCoder & more.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {lastUpdated && (
+                  <span className="text-xs text-muted-foreground">
+                    Updated: {lastUpdated.toLocaleTimeString()}
+                  </span>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={refresh}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
           </motion.div>
+
+          {/* Live Contests Banner */}
+          {liveContests.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mb-6 p-4 rounded-xl bg-gradient-to-r from-red-500/20 via-orange-500/20 to-yellow-500/20 border border-red-500/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-red-500 animate-pulse" />
+                  <span className="font-semibold text-red-400">LIVE NOW</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {liveContests.map(c => (
+                    <Badge key={c.id} variant="destructive" className="animate-pulse">
+                      {c.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Filters */}
           <motion.div
@@ -218,6 +228,22 @@ const Contests = () => {
             </div>
           </motion.div>
 
+          {/* Loading State */}
+          {loading && contests.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading live contests...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="text-center py-10">
+              <p className="text-destructive mb-4">{error}</p>
+              <Button onClick={refresh}>Try Again</Button>
+            </div>
+          )}
+
           {/* Contest Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredContests.map((contest, index) => (
@@ -228,14 +254,26 @@ const Contests = () => {
                 transition={{ duration: 0.5, delay: 0.1 + index * 0.05 }}
                 className="group"
               >
-                <div className="glass rounded-2xl p-6 h-full border border-border/50 hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5">
+                <div className={`glass rounded-2xl p-6 h-full border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  subscribedContests.has(contest.id) 
+                    ? 'border-primary/50 shadow-primary/10 shadow-lg' 
+                    : 'border-border/50 hover:border-primary/30 hover:shadow-primary/5'
+                }`}>
                   {/* Header */}
                   <div className="flex items-start gap-4 mb-4">
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${contest.color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}>
-                      {contest.logo}
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${platformColors[contest.platform] || 'from-primary to-accent'} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}>
+                      {platformLogos[contest.platform] || contest.platform.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold mb-1 line-clamp-2">{contest.name}</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        {contest.isLive && (
+                          <Badge variant="destructive" className="animate-pulse text-xs">
+                            <Radio className="w-3 h-3 mr-1" />
+                            LIVE
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="font-semibold line-clamp-2">{contest.name}</h3>
                       <p className="text-sm text-muted-foreground">{contest.platform}</p>
                     </div>
                   </div>
@@ -245,34 +283,50 @@ const Contests = () => {
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="w-4 h-4 text-primary" />
                       <span className="text-muted-foreground">Starts in</span>
-                      <span className="font-semibold">{contest.timeUntil}</span>
+                      <span className="font-semibold text-primary">
+                        {contestService.getTimeUntilStart(contest)}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Calendar className="w-4 h-4 text-accent" />
-                      <span className="text-muted-foreground">Duration:</span>
-                      <span>{contest.duration}</span>
+                      <span className="text-muted-foreground">
+                        {contest.startTime.toLocaleDateString('en-IN', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">{contest.difficulty}</Badge>
-                      <Badge variant="outline">{contest.participants} registered</Badge>
+                      {contest.difficulty && (
+                        <Badge variant="secondary">{contest.difficulty}</Badge>
+                      )}
+                      {subscribedContests.has(contest.id) && (
+                        <Badge variant="default" className="bg-primary/20 text-primary">
+                          <Volume2 className="w-3 h-3 mr-1" />
+                          Alarm Set
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
                   {/* Action */}
                   <Button
-                    className={`w-full ${contest.subscribed ? 'glow-primary-sm' : ''}`}
-                    variant={contest.subscribed ? "default" : "outline"}
-                    onClick={() => toggleSubscription(contest.id)}
+                    className={`w-full ${subscribedContests.has(contest.id) ? 'glow-primary-sm' : ''}`}
+                    variant={subscribedContests.has(contest.id) ? "default" : "outline"}
+                    onClick={() => toggleSubscription(contest)}
                   >
-                    {contest.subscribed ? (
+                    {subscribedContests.has(contest.id) ? (
                       <>
-                        <Bell className="w-4 h-4 mr-2" />
-                        Subscribed
+                        <BellOff className="w-4 h-4 mr-2" />
+                        Alarm Cancel करें
                       </>
                     ) : (
                       <>
                         <Bell className="w-4 h-4 mr-2" />
-                        Subscribe
+                        Alarm Set करें 🔔
                       </>
                     )}
                   </Button>
@@ -281,7 +335,7 @@ const Contests = () => {
             ))}
           </div>
 
-          {filteredContests.length === 0 && (
+          {filteredContests.length === 0 && !loading && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

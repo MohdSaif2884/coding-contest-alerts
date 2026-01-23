@@ -67,7 +67,7 @@ export function HeroSection() {
           >
             <Link to="/dashboard">
               <Button size="lg" className="glow-primary btn-shine text-base px-8">
-                Start for $1/month
+                Start Free
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
