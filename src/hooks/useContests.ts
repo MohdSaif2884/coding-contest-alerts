@@ -32,10 +32,16 @@ export function useContests(refreshInterval = 60000) {
   const upcomingContests = contests.filter(c => c.isUpcoming);
   const liveContests = contests.filter(c => c.isLive);
 
+  // Add timeUntilStart to each contest
+  const contestsWithTime = contests.map(c => ({
+    ...c,
+    timeUntilStart: contestService.getTimeUntilStart(c)
+  }));
+
   return {
-    contests,
-    upcomingContests,
-    liveContests,
+    contests: contestsWithTime,
+    upcomingContests: contestsWithTime.filter(c => c.isUpcoming),
+    liveContests: contestsWithTime.filter(c => c.isLive),
     loading,
     error,
     lastUpdated,
