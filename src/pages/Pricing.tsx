@@ -12,8 +12,8 @@ import {
 
 const faqs = [
   {
-    question: "How does the 7-day free trial work?",
-    answer: "You get full access to Web Push and Email notifications for 7 days. No credit card required. After the trial, you can upgrade to Pro for full WhatsApp access and all features."
+    question: "क्या AlgoBell free है?",
+    answer: "हाँ! AlgoBell पूरी तरह से free है। Web Push, Email notifications, और phone alarm सब free में मिलता है। Pro plan में WhatsApp alerts और extra features हैं।"
   },
   {
     question: "Can I cancel anytime?",
