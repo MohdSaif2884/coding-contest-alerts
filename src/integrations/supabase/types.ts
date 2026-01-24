@@ -14,7 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contest_subscriptions: {
+        Row: {
+          contest_id: string
+          contest_name: string
+          created_at: string
+          id: string
+          platform: string
+          start_time: string
+          user_id: string
+        }
+        Insert: {
+          contest_id: string
+          contest_name: string
+          created_at?: string
+          id?: string
+          platform: string
+          start_time: string
+          user_id: string
+        }
+        Update: {
+          contest_id?: string
+          contest_name?: string
+          created_at?: string
+          id?: string
+          platform?: string
+          start_time?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          notify_alarm: boolean
+          notify_email: boolean
+          notify_push: boolean
+          notify_whatsapp: boolean
+          reminder_10m: boolean
+          reminder_30m: boolean
+          reminder_60m: boolean
+          reminder_live: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notify_alarm?: boolean
+          notify_email?: boolean
+          notify_push?: boolean
+          notify_whatsapp?: boolean
+          reminder_10m?: boolean
+          reminder_30m?: boolean
+          reminder_60m?: boolean
+          reminder_live?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notify_alarm?: boolean
+          notify_email?: boolean
+          notify_push?: boolean
+          notify_whatsapp?: boolean
+          reminder_10m?: boolean
+          reminder_30m?: boolean
+          reminder_60m?: boolean
+          reminder_live?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
