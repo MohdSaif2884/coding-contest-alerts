@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { motion } from "framer-motion";
@@ -13,7 +14,8 @@ import {
   Volume2, 
   Zap,
   CheckCircle,
-  XCircle
+  XCircle,
+  LogIn
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,29 +23,27 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useContests } from "@/hooks/useContests";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useContestSubscriptions } from "@/hooks/useContestSubscriptions";
 import { alarmService } from "@/services/alarmService";
 import { toast } from "sonner";
-
-const reminderOffsetsData = [
-  { id: "60min", label: "60 minutes before", minutes: 60, enabled: true },
-  { id: "30min", label: "30 minutes before", minutes: 30, enabled: true },
-  { id: "10min", label: "10 minutes before", minutes: 10, enabled: false },
-  { id: "live", label: "When contest goes LIVE", minutes: 0, enabled: true },
-];
-
-const notificationChannelsData = [
-  { id: "whatsapp", icon: MessageSquare, label: "WhatsApp", enabled: false, color: "text-green-500", pro: true },
-  { id: "webpush", icon: Bell, label: "Web Push", enabled: true, color: "text-blue-500", pro: false },
-  { id: "email", icon: Mail, label: "Email", enabled: false, color: "text-orange-500", pro: false },
-  { id: "alarm", icon: Volume2, label: "In-App Alarm", enabled: true, color: "text-purple-500", pro: false },
-];
+import { useState } from "react";
 
 const Dashboard = () => {
-  const { contests, loading: isLoading } = useContests();
-  const [offsets, setOffsets] = useState(reminderOffsetsData);
-  const [channels, setChannels] = useState(notificationChannelsData);
-  const [subscribedContests, setSubscribedContests] = useState<Set<string>>(new Set());
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { contests, loading: contestsLoading } = useContests();
+  const { preferences, updatePreference } = useUserPreferences();
+  const { subscriptions, subscribe, unsubscribe, isSubscribed } = useContestSubscriptions();
   const [isTestingAlarm, setIsTestingAlarm] = useState(false);
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
 
   // Get upcoming contests (next 4)
   const upcomingContests = contests.slice(0, 4);
@@ -52,43 +52,29 @@ const Dashboard = () => {
   const stats = [
     { label: "Attended", value: 47, icon: CheckCircle, color: "text-accent", bgColor: "bg-accent/20" },
     { label: "Missed", value: 3, icon: XCircle, color: "text-destructive", bgColor: "bg-destructive/20" },
-    { label: "Upcoming", value: contests.length, icon: Calendar, color: "text-primary", bgColor: "bg-primary/20" },
+    { label: "Subscribed", value: subscriptions.length, icon: Calendar, color: "text-primary", bgColor: "bg-primary/20" },
   ];
 
-  const toggleOffset = (id: string) => {
-    setOffsets(offsets.map(o => o.id === id ? { ...o, enabled: !o.enabled } : o));
-    toast.success(`Reminder ${offsets.find(o => o.id === id)?.enabled ? 'disabled' : 'enabled'}`);
-  };
-
-  const toggleChannel = (id: string) => {
-    const channel = channels.find(c => c.id === id);
-    if (channel?.pro) {
-      toast.error("WhatsApp alerts are Pro feature - upgrade to unlock!");
+  const toggleSubscription = async (contest: typeof contests[0]) => {
+    if (!user) {
+      toast.error("Please login to subscribe to contests");
+      navigate('/auth');
       return;
     }
-    setChannels(channels.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c));
-    toast.success(`${channel?.label} ${channel?.enabled ? 'disabled' : 'enabled'}`);
-  };
 
-  const toggleSubscription = (contestId: string) => {
-    setSubscribedContests(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(contestId)) {
-        newSet.delete(contestId);
-        toast.info("Unsubscribed from contest");
-      } else {
-        newSet.add(contestId);
-        toast.success("🔔 Subscribed! You'll be reminded before the contest");
-      }
-      return newSet;
-    });
+    if (isSubscribed(contest.id)) {
+      await unsubscribe(contest.id);
+      toast.info("Unsubscribed from contest");
+    } else {
+      await subscribe(contest);
+      toast.success("🔔 Subscribed! You'll be reminded before the contest");
+    }
   };
 
   const testAlarm = async () => {
     setIsTestingAlarm(true);
     
     try {
-      // Request permission first
       const hasPermission = await alarmService.requestPermissions();
       
       if (!hasPermission) {
@@ -97,7 +83,6 @@ const Dashboard = () => {
         return;
       }
 
-      // Play test alarm sound
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
       audio.volume = 0.7;
       
@@ -107,7 +92,6 @@ const Dashboard = () => {
         duration: 5000,
       });
 
-      // Stop after 5 seconds
       setTimeout(() => {
         audio.pause();
         audio.currentTime = 0;
@@ -131,6 +115,45 @@ const Dashboard = () => {
     return styles[platform] || { color: 'from-primary to-accent', logo: platform.slice(0, 2).toUpperCase() };
   };
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="container-wide flex flex-col items-center justify-center min-h-[60vh]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-6">
+                <LogIn className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="text-2xl font-bold mb-2">Login Required</h1>
+              <p className="text-muted-foreground mb-6">
+                Please sign in to access your dashboard and manage contest subscriptions.
+              </p>
+              <Button onClick={() => navigate('/auth')} className="glow-primary-sm">
+                Sign In
+              </Button>
+            </motion.div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -143,7 +166,9 @@ const Dashboard = () => {
             transition={{ duration: 0.5 }}
             className="mb-8"
           >
-            <h1 className="text-3xl md:text-display-sm font-bold mb-2">Dashboard</h1>
+            <h1 className="text-3xl md:text-display-sm font-bold mb-2">
+              Welcome back, {user.user_metadata?.full_name?.split(' ')[0] || 'Coder'}! 👋
+            </h1>
             <p className="text-muted-foreground">Track your upcoming contests and performance at a glance.</p>
           </motion.div>
 
@@ -228,7 +253,7 @@ const Dashboard = () => {
                     <CardTitle className="flex items-center gap-2">
                       <Calendar className="w-5 h-5 text-primary" />
                       Upcoming Contests
-                      {isLoading && (
+                      {contestsLoading && (
                         <Badge variant="secondary" className="text-xs animate-pulse">
                           Loading...
                         </Badge>
@@ -244,8 +269,7 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {isLoading ? (
-                      // Skeleton loader
+                    {contestsLoading ? (
                       Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} className="flex items-center gap-4 p-4 rounded-xl bg-secondary/50 animate-pulse">
                           <div className="w-12 h-12 rounded-xl bg-muted" />
@@ -263,7 +287,7 @@ const Dashboard = () => {
                     ) : (
                       upcomingContests.map((contest) => {
                         const style = getPlatformStyle(contest.platform);
-                        const isSubscribed = subscribedContests.has(contest.id);
+                        const subscribed = isSubscribed(contest.id);
                         
                         return (
                           <div
@@ -284,12 +308,12 @@ const Dashboard = () => {
                               </div>
                             </div>
                             <Button
-                              variant={isSubscribed ? "default" : "outline"}
+                              variant={subscribed ? "default" : "outline"}
                               size="sm"
-                              onClick={() => toggleSubscription(contest.id)}
-                              className={isSubscribed ? "glow-primary-sm" : ""}
+                              onClick={() => toggleSubscription(contest)}
+                              className={subscribed ? "glow-primary-sm" : ""}
                             >
-                              {isSubscribed ? (
+                              {subscribed ? (
                                 <>
                                   <Bell className="w-4 h-4 mr-1" />
                                   Subscribed
@@ -324,15 +348,34 @@ const Dashboard = () => {
                   <CardDescription>When should we remind you?</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {offsets.map((offset) => (
-                    <div key={offset.id} className="flex items-center justify-between">
-                      <span className="text-sm">{offset.label}</span>
-                      <Switch
-                        checked={offset.enabled}
-                        onCheckedChange={() => toggleOffset(offset.id)}
-                      />
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">60 minutes before</span>
+                    <Switch
+                      checked={preferences.reminder_60m}
+                      onCheckedChange={(checked) => updatePreference('reminder_60m', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">30 minutes before</span>
+                    <Switch
+                      checked={preferences.reminder_30m}
+                      onCheckedChange={(checked) => updatePreference('reminder_30m', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">10 minutes before</span>
+                    <Switch
+                      checked={preferences.reminder_10m}
+                      onCheckedChange={(checked) => updatePreference('reminder_10m', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">When contest goes LIVE</span>
+                    <Switch
+                      checked={preferences.reminder_live}
+                      onCheckedChange={(checked) => updatePreference('reminder_live', checked)}
+                    />
+                  </div>
                 </CardContent>
               </Card>
 
@@ -346,23 +389,49 @@ const Dashboard = () => {
                   <CardDescription>How should we reach you?</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {channels.map((channel) => (
-                    <div key={channel.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <channel.icon className={`w-4 h-4 ${channel.color}`} />
-                        <span className="text-sm">{channel.label}</span>
-                        {channel.pro && (
-                          <Badge variant="outline" className="text-xs text-primary border-primary/50">
-                            PRO
-                          </Badge>
-                        )}
-                      </div>
-                      <Switch
-                        checked={channel.enabled}
-                        onCheckedChange={() => toggleChannel(channel.id)}
-                      />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-green-500" />
+                      <span className="text-sm">WhatsApp</span>
+                      <Badge variant="outline" className="text-xs text-primary border-primary/50">
+                        PRO
+                      </Badge>
                     </div>
-                  ))}
+                    <Switch
+                      checked={preferences.notify_whatsapp}
+                      onCheckedChange={() => toast.error("WhatsApp alerts are Pro feature - upgrade to unlock!")}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Web Push</span>
+                    </div>
+                    <Switch
+                      checked={preferences.notify_push}
+                      onCheckedChange={(checked) => updatePreference('notify_push', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-orange-500" />
+                      <span className="text-sm">Email</span>
+                    </div>
+                    <Switch
+                      checked={preferences.notify_email}
+                      onCheckedChange={(checked) => updatePreference('notify_email', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-purple-500" />
+                      <span className="text-sm">In-App Alarm</span>
+                    </div>
+                    <Switch
+                      checked={preferences.notify_alarm}
+                      onCheckedChange={(checked) => updatePreference('notify_alarm', checked)}
+                    />
+                  </div>
                 </CardContent>
               </Card>
 
@@ -384,10 +453,10 @@ const Dashboard = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Reminders Sent</span>
-                      <span className="font-semibold">23</span>
+                      <span className="text-muted-foreground">Subscriptions</span>
+                      <span className="font-semibold">{subscriptions.length}</span>
                     </div>
-                    <Progress value={76} className="h-2" />
+                    <Progress value={Math.min(subscriptions.length * 10, 100)} className="h-2" />
                   </div>
                 </CardContent>
               </Card>
