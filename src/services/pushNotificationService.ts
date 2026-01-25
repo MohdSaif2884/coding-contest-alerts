@@ -1,8 +1,9 @@
-// Push Notification Service for web browsers
+// Push Notification Service for web browsers with Firebase Cloud Messaging
+import { firebaseMessagingService } from './firebaseMessagingService';
+import { isFirebaseConfigured } from '@/config/firebase';
 
 class PushNotificationService {
-  private vapidKey: string | null = null;
-  private subscription: PushSubscription | null = null;
+  private scheduledNotifications: Map<string, NodeJS.Timeout> = new Map();
 
   async requestPermission(): Promise<boolean> {
     if (!('Notification' in window)) {
@@ -30,14 +31,21 @@ class PushNotificationService {
         return false;
       }
 
-      // Register service worker if not already registered
+      // Try Firebase Cloud Messaging first for background support
+      if (isFirebaseConfigured()) {
+        const token = await firebaseMessagingService.requestPermissionAndGetToken();
+        if (token) {
+          console.log('Subscribed to FCM for background notifications');
+          return true;
+        }
+      }
+
+      // Fallback to browser notifications
       if (!('serviceWorker' in navigator)) {
         console.warn('Service Worker not supported');
         return false;
       }
 
-      // For now, we'll use browser notifications directly
-      // In production, you'd register a service worker and use Push API
       console.log('Push notifications enabled via browser Notification API');
       return true;
     } catch (error) {
@@ -83,9 +91,15 @@ class PushNotificationService {
     }
 
     const delay = notificationTime.getTime() - now;
+    const notificationKey = `${contestId}-${offsetMinutes}`;
     
+    // Clear existing notification for this key
+    if (this.scheduledNotifications.has(notificationKey)) {
+      clearTimeout(this.scheduledNotifications.get(notificationKey));
+    }
+
     // Schedule the notification
-    setTimeout(async () => {
+    const timeoutId = setTimeout(async () => {
       await this.showNotification(
         `🔔 ${contestName}`,
         {
@@ -96,9 +110,29 @@ class PushNotificationService {
           data: { contestId, platform },
         }
       );
+      this.scheduledNotifications.delete(notificationKey);
     }, delay);
 
+    this.scheduledNotifications.set(notificationKey, timeoutId);
     console.log(`Push notification scheduled for ${contestName} at ${notificationTime.toLocaleString()}`);
+  }
+
+  cancelScheduledNotification(contestId: string, offsetMinutes?: number): void {
+    if (offsetMinutes !== undefined) {
+      const key = `${contestId}-${offsetMinutes}`;
+      if (this.scheduledNotifications.has(key)) {
+        clearTimeout(this.scheduledNotifications.get(key));
+        this.scheduledNotifications.delete(key);
+      }
+    } else {
+      // Cancel all notifications for this contest
+      for (const [key, timeoutId] of this.scheduledNotifications.entries()) {
+        if (key.startsWith(contestId)) {
+          clearTimeout(timeoutId);
+          this.scheduledNotifications.delete(key);
+        }
+      }
+    }
   }
 
   async isSupported(): Promise<boolean> {
@@ -110,6 +144,14 @@ class PushNotificationService {
       return 'unsupported';
     }
     return Notification.permission;
+  }
+
+  async isFCMEnabled(): Promise<boolean> {
+    return isFirebaseConfigured() && firebaseMessagingService.isInitialized();
+  }
+
+  getFCMToken(): string | null {
+    return firebaseMessagingService.getFCMToken();
   }
 }
 
