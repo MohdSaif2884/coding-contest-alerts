@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 export interface Contest {
   id: string;
   name: string;
@@ -11,22 +13,15 @@ export interface Contest {
   isUpcoming: boolean;
 }
 
-interface CodeforcesContest {
-  id: number;
+interface ApiContest {
+  id: string;
   name: string;
-  type: string;
-  phase: string;
-  frozen: boolean;
-  durationSeconds: number;
-  startTimeSeconds: number;
-  relativeTimeSeconds: number;
-}
-
-interface _LeetCodeContest {
-  title: string;
-  titleSlug: string;
-  startTime: number;
+  platform: string;
+  startTime: string;
+  endTime: string;
   duration: number;
+  link: string;
+  status: string;
 }
 
 class ContestService {
@@ -34,164 +29,116 @@ class ContestService {
   private CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   async fetchAllContests(): Promise<Contest[]> {
-    const contests: Contest[] = [];
-    
-    // Fetch from all platforms in parallel
-    const [codeforces, leetcode, codechef, atcoder] = await Promise.allSettled([
-      this.fetchCodeforcesContests(),
-      this.fetchLeetCodeContests(),
-      this.fetchCodeChefContests(),
-      this.fetchAtCoderContests()
-    ]);
-
-    if (codeforces.status === 'fulfilled') contests.push(...codeforces.value);
-    if (leetcode.status === 'fulfilled') contests.push(...leetcode.value);
-    if (codechef.status === 'fulfilled') contests.push(...codechef.value);
-    if (atcoder.status === 'fulfilled') contests.push(...atcoder.value);
-
-    // Sort by start time
-    return contests.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-  }
-
-  async fetchCodeforcesContests(): Promise<Contest[]> {
-    const cached = this.getFromCache('codeforces');
+    const cached = this.getFromCache('all');
     if (cached) return cached;
 
     try {
-      const response = await fetch('https://codeforces.com/api/contest.list');
-      const data = await response.json();
+      // Call the edge function for real API data
+      const { data, error } = await supabase.functions.invoke('fetch-contests');
       
-      if (data.status !== 'OK') {
-        throw new Error('Failed to fetch Codeforces contests');
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
       }
 
-      const contests: Contest[] = data.result
-        .filter((c: CodeforcesContest) => c.phase === 'BEFORE' || c.phase === 'CODING')
-        .slice(0, 20)
-        .map((c: CodeforcesContest) => {
-          const startTime = new Date(c.startTimeSeconds * 1000);
-          const endTime = new Date((c.startTimeSeconds + c.durationSeconds) * 1000);
+      if (!data?.success || !data?.data) {
+        console.warn('No contest data received, using fallback');
+        return this.getFallbackContests();
+      }
+
+      const contests: Contest[] = data.data
+        .filter((c: ApiContest) => c.name && c.startTime)
+        .map((c: ApiContest) => {
+          const startTime = new Date(c.startTime);
+          const endTime = c.endTime ? new Date(c.endTime) : new Date(startTime.getTime() + (c.duration || 7200) * 1000);
+          const now = Date.now();
           
           return {
-            id: `cf-${c.id}`,
+            id: c.id,
             name: c.name,
-            platform: 'Codeforces',
+            platform: this.normalizePlatform(c.platform),
             startTime,
             endTime,
-            duration: c.durationSeconds,
-            link: `https://codeforces.com/contest/${c.id}`,
-            difficulty: c.name.includes('Div. 1') ? 'Hard' : c.name.includes('Div. 2') ? 'Medium' : 'Mixed',
-            isLive: c.phase === 'CODING',
-            isUpcoming: c.phase === 'BEFORE'
+            duration: c.duration || Math.floor((endTime.getTime() - startTime.getTime()) / 1000),
+            link: c.link,
+            difficulty: this.inferDifficulty(c.name, c.platform),
+            isLive: c.status === 'LIVE' || (startTime.getTime() <= now && endTime.getTime() > now),
+            isUpcoming: c.status === 'UPCOMING' || startTime.getTime() > now,
           };
-        });
+        })
+        .filter((c: Contest) => c.isLive || c.isUpcoming);
 
-      this.setCache('codeforces', contests);
+      // Sort by start time
+      contests.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+      this.setCache('all', contests);
+      console.log(`Loaded ${contests.length} contests from API`);
       return contests;
     } catch (error) {
-      console.error('Error fetching Codeforces contests:', error);
-      return [];
+      console.error('Error fetching contests:', error);
+      return this.getFallbackContests();
     }
   }
 
-  async fetchLeetCodeContests(): Promise<Contest[]> {
-    const cached = this.getFromCache('leetcode');
-    if (cached) return cached;
-
-    try {
-      // LeetCode doesn't have a public API, using a proxy or mock data
-      // In production, you'd use a backend service to scrape or use unofficial APIs
-      const contests: Contest[] = [
-        {
-          id: 'lc-weekly',
-          name: 'Weekly Contest 380',
-          platform: 'LeetCode',
-          startTime: this.getNextSunday(2, 30), // Sunday 2:30 AM IST
-          endTime: this.getNextSunday(4, 0),
-          duration: 5400,
-          link: 'https://leetcode.com/contest/',
-          difficulty: 'Mixed',
-          isLive: false,
-          isUpcoming: true
-        },
-        {
-          id: 'lc-biweekly',
-          name: 'Biweekly Contest 120',
-          platform: 'LeetCode',
-          startTime: this.getNextSaturday(20, 0), // Saturday 8 PM IST
-          endTime: this.getNextSaturday(21, 30),
-          duration: 5400,
-          link: 'https://leetcode.com/contest/',
-          difficulty: 'Mixed',
-          isLive: false,
-          isUpcoming: true
-        }
-      ];
-
-      this.setCache('leetcode', contests);
-      return contests;
-    } catch (error) {
-      console.error('Error fetching LeetCode contests:', error);
-      return [];
-    }
+  private normalizePlatform(platform: string): string {
+    const normalized = platform.toLowerCase();
+    if (normalized.includes('leetcode')) return 'LeetCode';
+    if (normalized.includes('codeforces')) return 'Codeforces';
+    if (normalized.includes('codechef')) return 'CodeChef';
+    if (normalized.includes('atcoder')) return 'AtCoder';
+    return platform;
   }
 
-  async fetchCodeChefContests(): Promise<Contest[]> {
-    const cached = this.getFromCache('codechef');
-    if (cached) return cached;
-
-    try {
-      // CodeChef API mock - in production use their API
-      const contests: Contest[] = [
-        {
-          id: 'cc-starters',
-          name: 'Starters 120',
-          platform: 'CodeChef',
-          startTime: this.getNextWednesday(20, 0),
-          endTime: this.getNextWednesday(22, 0),
-          duration: 7200,
-          link: 'https://www.codechef.com/START120',
-          difficulty: 'Easy',
-          isLive: false,
-          isUpcoming: true
-        }
-      ];
-
-      this.setCache('codechef', contests);
-      return contests;
-    } catch (error) {
-      console.error('Error fetching CodeChef contests:', error);
-      return [];
-    }
+  private inferDifficulty(name: string, _platform: string): string {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('div. 1') || lowerName.includes('div.1')) return 'Hard';
+    if (lowerName.includes('div. 2') || lowerName.includes('div.2')) return 'Medium';
+    if (lowerName.includes('div. 3') || lowerName.includes('div.3') || lowerName.includes('beginner')) return 'Easy';
+    if (lowerName.includes('educational') || lowerName.includes('abc')) return 'Easy';
+    if (lowerName.includes('agc') || lowerName.includes('arc')) return 'Hard';
+    return 'Mixed';
   }
 
-  async fetchAtCoderContests(): Promise<Contest[]> {
-    const cached = this.getFromCache('atcoder');
-    if (cached) return cached;
-
-    try {
-      // AtCoder API mock
-      const contests: Contest[] = [
-        {
-          id: 'ac-abc',
-          name: 'AtCoder Beginner Contest 340',
-          platform: 'AtCoder',
-          startTime: this.getNextSaturday(17, 30),
-          endTime: this.getNextSaturday(19, 10),
-          duration: 6000,
-          link: 'https://atcoder.jp/contests/abc340',
-          difficulty: 'Easy',
-          isLive: false,
-          isUpcoming: true
-        }
-      ];
-
-      this.setCache('atcoder', contests);
-      return contests;
-    } catch (error) {
-      console.error('Error fetching AtCoder contests:', error);
-      return [];
-    }
+  private getFallbackContests(): Contest[] {
+    // Return some reasonable fallback data if API fails
+    return [
+      {
+        id: 'lc-weekly-fallback',
+        name: 'Weekly Contest (Check LeetCode for details)',
+        platform: 'LeetCode',
+        startTime: this.getNextSunday(2, 30),
+        endTime: this.getNextSunday(4, 0),
+        duration: 5400,
+        link: 'https://leetcode.com/contest/',
+        difficulty: 'Mixed',
+        isLive: false,
+        isUpcoming: true
+      },
+      {
+        id: 'cc-starters-fallback',
+        name: 'Starters (Check CodeChef for details)',
+        platform: 'CodeChef',
+        startTime: this.getNextWednesday(20, 0),
+        endTime: this.getNextWednesday(22, 0),
+        duration: 7200,
+        link: 'https://www.codechef.com/contests',
+        difficulty: 'Easy',
+        isLive: false,
+        isUpcoming: true
+      },
+      {
+        id: 'ac-abc-fallback',
+        name: 'AtCoder Beginner Contest (Check AtCoder for details)',
+        platform: 'AtCoder',
+        startTime: this.getNextSaturday(17, 30),
+        endTime: this.getNextSaturday(19, 10),
+        duration: 6000,
+        link: 'https://atcoder.jp/contests/',
+        difficulty: 'Easy',
+        isLive: false,
+        isUpcoming: true
+      }
+    ];
   }
 
   private getFromCache(key: string): Contest[] | null {

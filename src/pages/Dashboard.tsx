@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -12,7 +12,6 @@ import {
   MessageSquare, 
   Smartphone, 
   Volume2, 
-  Zap,
   CheckCircle,
   XCircle,
   LogIn
@@ -21,14 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { useContests } from "@/hooks/useContests";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useContestSubscriptions } from "@/hooks/useContestSubscriptions";
 import { alarmService } from "@/services/alarmService";
+import { pushNotificationService } from "@/services/pushNotificationService";
 import { toast } from "sonner";
-import { useState } from "react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -37,6 +35,14 @@ const Dashboard = () => {
   const { preferences, updatePreference } = useUserPreferences();
   const { subscriptions, subscribe, unsubscribe, isSubscribed } = useContestSubscriptions();
   const [isTestingAlarm, setIsTestingAlarm] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+
+  // Check push notification status
+  useEffect(() => {
+    pushNotificationService.getPermissionStatus().then((status) => {
+      setPushEnabled(status === 'granted');
+    });
+  }, []);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -439,24 +445,24 @@ const Dashboard = () => {
               <Card className="glass border-border/50">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <Zap className="w-5 h-5 text-primary" />
+                    <Bell className="w-5 h-5 text-primary" />
                     This Month
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Attendance Rate</span>
-                      <span className="font-semibold text-accent">94%</span>
-                    </div>
-                    <Progress value={94} className="h-2" />
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+                    <span className="text-sm text-muted-foreground">Attendance Rate</span>
+                    <span className="font-semibold text-accent">94%</span>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Subscriptions</span>
-                      <span className="font-semibold">{subscriptions.length}</span>
-                    </div>
-                    <Progress value={Math.min(subscriptions.length * 10, 100)} className="h-2" />
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+                    <span className="text-sm text-muted-foreground">Subscriptions</span>
+                    <span className="font-semibold text-primary">{subscriptions.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+                    <span className="text-sm text-muted-foreground">Push Enabled</span>
+                    <Badge variant={pushEnabled ? "default" : "secondary"}>
+                      {pushEnabled ? "Active" : "Disabled"}
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>
