@@ -36,13 +36,44 @@ const Dashboard = () => {
   const { subscriptions, subscribe, unsubscribe, isSubscribed } = useContestSubscriptions();
   const [isTestingAlarm, setIsTestingAlarm] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [fcmEnabled, setFcmEnabled] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
 
-  // Check push notification status
+  // Check push notification status and initialize FCM
   useEffect(() => {
-    pushNotificationService.getPermissionStatus().then((status) => {
+    const checkPushStatus = async () => {
+      const status = await pushNotificationService.getPermissionStatus();
       setPushEnabled(status === 'granted');
-    });
+      
+      if (status === 'granted') {
+        const isFcm = await pushNotificationService.isFCMEnabled();
+        setFcmEnabled(isFcm);
+      }
+    };
+    checkPushStatus();
   }, []);
+
+  const enablePushNotifications = async () => {
+    setIsEnablingPush(true);
+    try {
+      const success = await pushNotificationService.subscribe();
+      if (success) {
+        setPushEnabled(true);
+        const isFcm = await pushNotificationService.isFCMEnabled();
+        setFcmEnabled(isFcm);
+        toast.success(isFcm 
+          ? "🔔 Background notifications enabled! You'll receive alerts even when the browser is closed."
+          : "🔔 Push notifications enabled!");
+      } else {
+        toast.error("Failed to enable push notifications. Please check your browser settings.");
+      }
+    } catch (error) {
+      console.error("Error enabling push:", error);
+      toast.error("Failed to enable push notifications");
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -412,11 +443,28 @@ const Dashboard = () => {
                     <div className="flex items-center gap-2">
                       <Bell className="w-4 h-4 text-blue-500" />
                       <span className="text-sm">Web Push</span>
+                      {fcmEnabled && (
+                        <Badge variant="outline" className="text-xs text-accent border-accent/50">
+                          FCM
+                        </Badge>
+                      )}
                     </div>
-                    <Switch
-                      checked={preferences.notify_push}
-                      onCheckedChange={(checked) => updatePreference('notify_push', checked)}
-                    />
+                    {!pushEnabled ? (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={enablePushNotifications}
+                        disabled={isEnablingPush}
+                        className="h-7 text-xs"
+                      >
+                        {isEnablingPush ? "Enabling..." : "Enable"}
+                      </Button>
+                    ) : (
+                      <Switch
+                        checked={preferences.notify_push}
+                        onCheckedChange={(checked) => updatePreference('notify_push', checked)}
+                      />
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -459,9 +507,9 @@ const Dashboard = () => {
                     <span className="font-semibold text-primary">{subscriptions.length}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                    <span className="text-sm text-muted-foreground">Push Enabled</span>
-                    <Badge variant={pushEnabled ? "default" : "secondary"}>
-                      {pushEnabled ? "Active" : "Disabled"}
+                    <span className="text-sm text-muted-foreground">Push Notifications</span>
+                    <Badge variant={pushEnabled ? "default" : "secondary"} className={fcmEnabled ? "bg-accent" : ""}>
+                      {fcmEnabled ? "FCM Active" : pushEnabled ? "Browser Only" : "Disabled"}
                     </Badge>
                   </div>
                 </CardContent>
