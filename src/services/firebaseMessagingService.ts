@@ -2,11 +2,13 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { firebaseConfig, vapidKey, isFirebaseConfigured } from '@/config/firebase';
+import { supabase } from '@/integrations/supabase/client';
 
 class FirebaseMessagingService {
   private messaging: Messaging | null = null;
   private fcmToken: string | null = null;
   private initialized = false;
+  private tokenSavedToDb = false;
 
   async initialize(): Promise<boolean> {
     if (this.initialized) return true;
@@ -107,6 +109,10 @@ class FirebaseMessagingService {
       if (token) {
         this.fcmToken = token;
         console.log('FCM Token obtained:', token.substring(0, 20) + '...');
+        
+        // Save token to database for server-side notifications
+        await this.saveTokenToDatabase(token);
+        
         return token;
       }
 
@@ -116,6 +122,44 @@ class FirebaseMessagingService {
       console.error('Error getting FCM token:', error);
       return null;
     }
+  }
+
+  private async saveTokenToDatabase(token: string): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user logged in, skipping token save');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('fcm_tokens')
+        .upsert(
+          {
+            user_id: user.id,
+            token: token,
+            device_info: navigator.userAgent,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id,token',
+          }
+        );
+
+      if (error) {
+        console.error('Error saving FCM token to database:', error);
+        return;
+      }
+
+      this.tokenSavedToDb = true;
+      console.log('FCM token saved to database for server-side notifications');
+    } catch (error) {
+      console.error('Error in saveTokenToDatabase:', error);
+    }
+  }
+
+  isTokenSavedToDatabase(): boolean {
+    return this.tokenSavedToDb;
   }
 
   getFCMToken(): string | null {
