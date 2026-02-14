@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { href: "/#features", label: "Features" },
-  { href: "/#how-it-works", label: "How it Works" },
+  { href: "/#platforms", label: "Platforms" },
   { href: "/pricing", label: "Pricing" },
   { href: "/contests", label: "Contests" },
 ];
@@ -53,14 +53,9 @@ export function Navbar() {
         <div className="flex items-center justify-between h-14 lg:h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <Bell className="w-5 h-5 text-primary-foreground group-hover:animate-bell-ring" />
-              </div>
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-accent blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-            </div>
-            <span className="text-xl font-bold">
-              Algo<span className="text-gradient">Bell</span>
+            <Bell className="w-6 h-6 text-primary group-hover:animate-bell-ring" />
+            <span className="text-lg font-bold tracking-tight">
+              AlgoBell
             </span>
           </Link>
 
