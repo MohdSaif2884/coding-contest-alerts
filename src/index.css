@@ -17,7 +17,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 60%;
+    --primary: 252 87% 65%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 220 14% 96%;
@@ -34,54 +34,54 @@
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 217 91% 60%;
+    --ring: 252 87% 65%;
 
     --radius: 0.75rem;
 
     /* Custom AlgoBell tokens */
-    --glow-primary: 217 91% 60%;
-    --glow-accent: 160 84% 39%;
+    --glow-primary: 252 87% 65%;
+    --glow-accent: 280 80% 55%;
     --surface-elevated: 0 0% 98%;
-    --gradient-start: 217 91% 60%;
-    --gradient-end: 160 84% 39%;
+    --gradient-start: 252 87% 65%;
+    --gradient-end: 280 80% 55%;
   }
 
   .dark {
-    /* Dark mode - Premium hacker aesthetic */
-    --background: 228 84% 5%;
+    /* Dark mode - Circuit board techy aesthetic */
+    --background: 222 47% 6%;
     --foreground: 210 40% 98%;
 
-    --card: 228 47% 8%;
+    --card: 222 40% 9%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 228 47% 8%;
+    --popover: 222 40% 9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
+    --primary: 252 87% 65%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 228 30% 14%;
+    --secondary: 222 30% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 228 30% 14%;
+    --muted: 222 30% 14%;
     --muted-foreground: 215 20% 65%;
 
-    --accent: 160 84% 39%;
+    --accent: 252 87% 65%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 228 20% 18%;
-    --input: 228 20% 18%;
-    --ring: 217 91% 60%;
+    --border: 222 20% 16%;
+    --input: 222 20% 16%;
+    --ring: 252 87% 65%;
 
     /* Custom dark tokens */
-    --glow-primary: 217 91% 60%;
-    --glow-accent: 160 84% 39%;
-    --surface-elevated: 228 40% 10%;
-    --gradient-start: 217 91% 60%;
-    --gradient-end: 160 84% 39%;
+    --glow-primary: 252 87% 65%;
+    --glow-accent: 280 80% 55%;
+    --surface-elevated: 222 40% 10%;
+    --gradient-start: 252 87% 65%;
+    --gradient-end: 280 80% 55%;
   }
 }
 
@@ -117,7 +117,8 @@
 @layer utilities {
   /* Gradient text */
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+    @apply bg-clip-text text-transparent bg-gradient-to-r;
+    background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--glow-accent)));
   }
 
   /* Glow effects */
@@ -167,6 +168,14 @@
       linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
     background-size: 60px 60px;
+  }
+
+  /* Circuit board pattern */
+  .bg-circuit {
+    background-image:
+      linear-gradient(90deg, hsl(var(--primary) / 0.05) 1px, transparent 1px),
+      linear-gradient(0deg, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
   }
 
   /* Dot pattern */

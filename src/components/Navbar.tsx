@@ -47,10 +47,10 @@ export function Navbar() {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="fixed top-0 left-0 right-0 z-50 glass border-b border-border/50"
+      className="fixed top-4 left-4 right-4 z-50"
     >
-      <nav className="container-wide">
-        <div className="flex items-center justify-between h-16 lg:h-20">
+      <nav className="container-wide glass rounded-full px-6">
+        <div className="flex items-center justify-between h-14 lg:h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <div className="relative">
@@ -126,8 +126,8 @@ export function Navbar() {
                   </Button>
                 </Link>
                 <Link to="/auth">
-                  <Button size="sm" className="glow-primary-sm">
-                    Get Started
+                  <Button size="sm" className="glow-primary-sm rounded-full bg-gradient-to-r from-primary to-glow-accent">
+                    Get Started Free
                   </Button>
                 </Link>
               </>
